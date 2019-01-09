@@ -1,5 +1,7 @@
 #  coding: utf-8 
 import SocketServer
+import urllib2
+import os
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -29,11 +31,94 @@ import SocketServer
 
 class MyWebServer(SocketServer.BaseRequestHandler):
     
-    def handle(self):
-        self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
-        self.request.sendall("OK")
+    # Initializes member variables used throughout the process of handling a request
+    def initResponseVars(self):
+        self.statusCode = 200
+        self.statusMessage = "OK"
+        self.contentType = "text/plain"
+        self.responseBody = ""
 
+    # Handles an incoming HTTP request
+    def handle(self):
+        self.initResponseVars()
+        self.data = self.request.recv(1024).strip().split("\n")
+
+        methodDetails = self.data[0].split(" ")
+        # TODO: does the upper case conversion need to happen?
+        method = methodDetails[0].upper()
+
+        # TODO: remove this
+        #print ("Got a request of: %s\n" % self.data)
+        if (method == "GET"):
+            self.handleGetRequest(methodDetails[1])
+        else:
+            self.statusCode = 405
+            self.statusMessage = "Method Not Allowed"
+            self.responseBody = "Method Not Allowed. Use GET instead."
+        
+        self.sendResponse()
+        if (self.statusCode == 404):
+            # Credit to https://stackoverflow.com/a/24065533 for how to raise an exception in Python
+            raise urllib2.HTTPError("404 Resource Not Found")
+
+    # Sets the status of the current request as one being made to a non-existant resource
+    def setResourceNotFound(self):
+        self.statusCode = 404
+        self.statusMessage = "Resource Not Found"
+
+    # Sets the status of the current request as one that has successfully reached a resource at the given path
+    # @param {String} path - the path to the resource the request was made to
+    def setResourceFound(self, path):
+        # TODO: should error be raised manually here?
+        try:
+            resource = open(path)
+            self.responseBody = resource.read()
+            if (path.endswith(".html")):
+                self.contentType = "text/html"
+            elif (path.endswith(".css")):
+                self.contentType = "text/css"
+        except:
+            raise urllib2.HTTPError("500 Internal Server Error")
+
+    # Handles the resource at the given path
+    # @param {String} path - the absolute path to a resource
+    def handleGetPath(self, path):
+        if (os.path.isdir(path)):
+            # Check for index.html existing in the specified directory
+            indexPath = os.path.join(path, "index.html")
+            if (os.path.exists(indexPath)):
+                self.setResourceFound(indexPath)
+            else:
+                self.setResourceNotFound()
+        else:
+            self.setResourceFound(path)
+
+    # Handles an incoming GET request
+    # @param {String} path - the relative path to the resource to get, from the ./www/ directory
+    def handleGetRequest(self, path):
+        # From https://docs.python.org/2/library/os.path.html
+        requestedPath = os.path.abspath("www" + path)
+        if (os.path.join(os.getcwd(), "www") in requestedPath and os.path.exists(requestedPath)):
+            self.handleGetPath(requestedPath)
+        else:
+            self.setResourceNotFound()
+
+    # Builds a response to the current request being handled
+    # @return {String} - the response to the request being handled
+    def buildResponse(self):
+        # Credit to https://stackoverflow.com/a/40828904 for example of Python string formatting
+        response = "HTTP/1.1 %s %s" % (self.statusCode, self.statusMessage)
+        if (self.contentType != None):
+            # Credit to https://stackoverflow.com/a/30686735 for string byte length
+            response += "\nContent-Type: %s\nContent-Length: %d\n\n%s" % (self.contentType, len(self.responseBody.encode("utf-8")), self.responseBody)
+
+        return response
+
+    # Sends a response to the current request being serviced
+    def sendResponse(self):
+        # Credit to https://stackoverflow.com/a/28056437 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#HTTP_Responses for what should be sent to the request
+        self.request.sendall(self.buildResponse())
+    
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
 
