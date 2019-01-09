@@ -1,7 +1,6 @@
-#  coding: utf-8 
-import SocketServer
-import urllib2
+#  coding: utf-8
 import os
+import socketserver
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -29,7 +28,7 @@ import os
 # try: curl -v -X GET http://127.0.0.1:8080/
 
 
-class MyWebServer(SocketServer.BaseRequestHandler):
+class MyWebServer(socketserver.BaseRequestHandler):
     
     # Initializes member variables used throughout the process of handling a request
     def initResponseVars(self):
@@ -41,7 +40,7 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     # Handles an incoming HTTP request
     def handle(self):
         self.initResponseVars()
-        self.data = self.request.recv(1024).strip().split("\n")
+        self.data = self.request.recv(1024).strip().decode("utf8").split("\n")
 
         methodDetails = self.data[0].split(" ")
         # TODO: does the upper case conversion need to happen?
@@ -54,12 +53,9 @@ class MyWebServer(SocketServer.BaseRequestHandler):
         else:
             self.statusCode = 405
             self.statusMessage = "Method Not Allowed"
-            self.responseBody = "Method Not Allowed. Use GET instead."
+            self.responseBody = "Only GET is supported."
         
         self.sendResponse()
-        if (self.statusCode == 404):
-            # Credit to https://stackoverflow.com/a/24065533 for how to raise an exception in Python
-            raise urllib2.HTTPError("404 Resource Not Found")
 
     # Sets the status of the current request as one being made to a non-existant resource
     def setResourceNotFound(self):
@@ -69,7 +65,6 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     # Sets the status of the current request as one that has successfully reached a resource at the given path
     # @param {String} path - the path to the resource the request was made to
     def setResourceFound(self, path):
-        # TODO: should error be raised manually here?
         try:
             resource = open(path)
             self.responseBody = resource.read()
@@ -78,7 +73,8 @@ class MyWebServer(SocketServer.BaseRequestHandler):
             elif (path.endswith(".css")):
                 self.contentType = "text/css"
         except:
-            raise urllib2.HTTPError("500 Internal Server Error")
+            self.statusCode = 500
+            self.statusMessage = "Internal Server Error"
 
     # Handles the resource at the given path
     # @param {String} path - the absolute path to a resource
@@ -117,14 +113,14 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     # Sends a response to the current request being serviced
     def sendResponse(self):
         # Credit to https://stackoverflow.com/a/28056437 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#HTTP_Responses for what should be sent to the request
-        self.request.sendall(self.buildResponse())
+        self.request.sendall(bytearray(self.buildResponse(), "utf8"))
     
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
 
-    SocketServer.TCPServer.allow_reuse_address = True
+    socketserver.TCPServer.allow_reuse_address = True
     # Create the server, binding to localhost on port 8080
-    server = SocketServer.TCPServer((HOST, PORT), MyWebServer)
+    server = socketserver.TCPServer((HOST, PORT), MyWebServer)
 
     # Activate the server; this will keep running until you
     # interrupt the program with Ctrl-C
