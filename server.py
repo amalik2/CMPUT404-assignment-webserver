@@ -90,7 +90,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
     # Handles an incoming GET request
     # @param {String} path - the relative path to the resource to get, from the ./www/ directory
     def handleGetRequest(self, path):
-        # From https://docs.python.org/2/library/os.path.html
+        # From https://docs.python.org/3/library/os.path.html
         requestedPath = os.path.abspath("www" + path)
         if (os.path.join(os.getcwd(), "www") in requestedPath and os.path.exists(requestedPath)):
             self.handleGetPath(requestedPath)
@@ -101,16 +101,16 @@ class MyWebServer(socketserver.BaseRequestHandler):
     # @return {String} - the response to the request being handled
     def buildResponse(self):
         # Credit to https://stackoverflow.com/a/40828904 for example of Python string formatting
-        response = "HTTP/1.1 %s %s" % (self.statusCode, self.statusMessage)
-        if (self.contentType != None):
-            # Credit to https://stackoverflow.com/a/30686735 for string byte length
-            response += "\nContent-Type: %s\nContent-Length: %d\n\n%s" % (self.contentType, len(self.responseBody.encode("utf-8")), self.responseBody)
+        # Credit to https://stackoverflow.com/a/28056437 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#HTTP_Responses for what should be sent to the request
+        response = "HTTP/1.1 %s %s\nConnection: close" % (self.statusCode, self.statusMessage)
+
+        # Credit to https://stackoverflow.com/a/30686735 for string byte length
+        response += "\nContent-Type: %s\nContent-Length: %d\n\n%s" % (self.contentType, len(self.responseBody.encode("utf-8")), self.responseBody)
 
         return response
 
     # Sends a response to the current request being serviced
     def sendResponse(self):
-        # Credit to https://stackoverflow.com/a/28056437 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#HTTP_Responses for what should be sent to the request
         self.request.sendall(bytearray(self.buildResponse(), "utf8"))
     
 if __name__ == "__main__":
