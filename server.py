@@ -46,8 +46,6 @@ class MyWebServer(socketserver.BaseRequestHandler):
         # TODO: does the upper case conversion need to happen?
         method = methodDetails[0].upper()
 
-        # TODO: remove this
-        #print ("Got a request of: %s\n" % self.data)
         if (method == "GET"):
             self.handleGetRequest(methodDetails[1])
         else:
