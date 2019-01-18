@@ -36,6 +36,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
         self.statusMessage = "OK"
         self.contentType = "text/plain"
         self.responseBody = ""
+        self.redirectHeader = None
 
     # Handles an incoming HTTP request
     def handle(self):
@@ -43,7 +44,6 @@ class MyWebServer(socketserver.BaseRequestHandler):
         self.data = self.request.recv(1024).strip().decode("utf8").split("\n")
 
         methodDetails = self.data[0].split(" ")
-        # TODO: does the upper case conversion need to happen?
         method = methodDetails[0].upper()
 
         if (method == "GET"):
@@ -74,10 +74,21 @@ class MyWebServer(socketserver.BaseRequestHandler):
             self.statusCode = 500
             self.statusMessage = "Internal Server Error"
 
+    # Handles a 301 permanent redirect for a path
+    # @param {String} newPath - the new path to redirect to
+    def setPermanentRedirect(self, newPath):
+        self.statusCode = 301
+        self.statusMessage = "Moved Permanently"
+        self.redirectHeader = newPath
+
     # Handles the resource at the given path
     # @param {String} path - the absolute path to a resource
-    def handleGetPath(self, path):
+    # @param {String} requestPath - the path the GET request was made to
+    def handleGetPath(self, path, requestPath):
         if (os.path.isdir(path)):
+            if (not requestPath.endswith("/")):
+                self.setPermanentRedirect(requestPath + "/")
+                return
             # Check for index.html existing in the specified directory
             indexPath = os.path.join(path, "index.html")
             if (os.path.exists(indexPath)):
@@ -93,18 +104,21 @@ class MyWebServer(socketserver.BaseRequestHandler):
         # From https://docs.python.org/3/library/os.path.html
         requestedPath = os.path.abspath("www" + path)
         if (os.path.join(os.getcwd(), "www") in requestedPath and os.path.exists(requestedPath)):
-            self.handleGetPath(requestedPath)
+            self.handleGetPath(requestedPath, path)
         else:
             self.setResourceNotFound()
 
     # Builds a response to the current request being handled
     # @return {String} - the response to the request being handled
     def buildResponse(self):
-        # Credit to https://stackoverflow.com/a/40828904 for example of Python string formatting
-        # Credit to https://stackoverflow.com/a/28056437 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#HTTP_Responses for what should be sent to the request
+        # Credit to Anthon at https://stackoverflow.com/a/40828904 for example of Python string formatting
+        # Credit to Luky at https://stackoverflow.com/a/28056437 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#HTTP_Responses for what should be sent to the request
         response = "HTTP/1.1 %s %s\nConnection: close" % (self.statusCode, self.statusMessage)
 
-        # Credit to https://stackoverflow.com/a/30686735 for string byte length
+        if (self.statusCode == 301):
+            response += "\nLocation: %s" % (self.redirectHeader)
+
+        # Credit to Kris at https://stackoverflow.com/a/30686735 for string byte length
         response += "\nContent-Type: %s\nContent-Length: %d\n\n%s" % (self.contentType, len(self.responseBody.encode("utf-8")), self.responseBody)
 
         return response
